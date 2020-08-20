@@ -88,9 +88,23 @@ svgObj.prototype.setSize = function () {
     this.zoomH = 1.75;
 }
 
+function record(id)
+{
+    let index = historylist.indexOf(id);
+    if(index!=-1) historylist.splice(index,1);
+    historylist.push(id);
+    if(historylist.length>10) historylist.shift();
+
+}
+
+
 svgObj.prototype.drawEntity = function(id, tmpModel = instance_model) {
 
-    if(this.valuelist.fresh) this.valuelist.init();
+    if(this.valuelist.fresh)
+    {
+        this.valuelist.init();
+        record(id);
+    }
 
     this.mape2r = undefined;
 
@@ -125,10 +139,12 @@ svgObj.prototype.drawEntity = function(id, tmpModel = instance_model) {
 
 svgObj.prototype.drawRecommendation = function(id, rcmdModel = recommend_model, tmpModel = instance_model) {
 
+    //console.log('drawrcmd');
     if(this.valuelist.fresh)
     {
         this.valuelist.init();
         this.mape2r = {};
+        record(id);
     }
     if(this.rcmd.fresh) this.rcmd.jumpLen=0;
 
@@ -214,7 +230,20 @@ svgObj.prototype.drawRecommendation = function(id, rcmdModel = recommend_model, 
 
     this.rcmdDestroy();
 
-
+    $('g.entity.isRecommendation').contextmenu({
+        target:'#reject-entity',
+        before: function(e,context) {
+            e.preventDefault();
+            $('popover').hide();
+            // execute code before context menu if shown
+        },
+        onItem: function(context,e) {
+            let id=context.attr('id')
+            id= id.split("-")["0"];
+            connection.io_reject_rcmdModel_entity(id)
+            // execute on menu item selection
+        }
+    })
 
     return true;
 }
@@ -424,6 +453,8 @@ svgObj.prototype.drawNode = function(centX, centY, r, node, type, isCenter = fal
             }
         }
     }
+
+
 
     //添加图元
     this.svg

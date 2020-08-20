@@ -26,6 +26,52 @@ $(function () {
         }
     })
 
+    $(document).on("click", '#stigmod-history-btn', function () {
+        let list = $('#history-list');
+        list.empty();
+        for(let i=historylist.length-1;i>=0;i--)
+        {
+            let id = historylist[i];
+            if(instance_model.nodes[id]==undefined) continue;
+            let value = instance_model.nodes[id].value;
+            let content= ' <li class="historyitem" value="'+id+'"><a>'+value+'</a></li> ';
+            list.append(content);
+        }
+    })
+
+    $(document).on('click','.historyitem',function(){
+        let id = $(this).attr('value');
+        clickTimeout.set(function () {
+            if (instance_model.nodes[id] == undefined) {//这个是要干嘛??
+                $(".properties-revise .button-left").click();
+                $(properties).children().remove();
+                detail.drawIndex();
+                svg.drawEntity(id);
+
+            } else {//大多数时候执行这个
+                drawNodeDetails(id);
+            }
+        });
+    })
+
+    $('#mute-window').on('show.bs.modal', function () {
+        connection.io_get_reject();
+    })
+
+    $('#mute-window').on('hide.bs.modal',function(){
+        //TODO 模型重绘,暂时使用直接刷新的简单方案，优化效率请参考引用推荐关系
+        let nodeId = $('g.entity.center').attr("id");
+        let node = {}
+        node[nodeId] = eval('(' + JSON.stringify(instance_model.nodes[nodeId]) + ')');
+        connection.io_recommend_insModel_node(node);
+    })
+
+    $(document).on("click", ".btn.recover-reject", function () {
+        connection.io_recover_relation($(this).attr('value'));
+        $(this).prop('disabled',true);
+    })
+
+
     $(document).on("click", ".btn-group.workspace", function () {
         switching=true;
         if ($(this).children(".btn-default").hasClass("off")) {
@@ -266,6 +312,37 @@ $(function () {
         $("#modalAddEntity").modal('hide')
     })
 
+    $(document).on("click", '#modalRec .btn-primary', function () {
+        //console.log('clicked');
+        $("#modalRec").modal('hide')
+        isGetRcmd = true;   //跟显示图元有关
+        connection.io_cite_recommend(0);
+        console.log(rcmd_pending);
+        for (let i in rcmd_pending.entities) {
+            connection.io_create_insModel_entity(rcmd_pending.entities[i]);
+        }
+        if (getJsonLength(rcmd_pending.nodes) > 0) {
+            connection.io_create_insModel_node(rcmd_pending.nodes)
+        }
+        if (getJsonLength(rcmd_pending.relations) > 0) {
+            connection.io_create_insModel_relation(rcmd_pending.relations);
+            //console.log(rcmd_pending.relations);
+        }
+        connection.io_cite_recommend(1);
+    })
+
+
+    $(document).on("click",'#modalRec .btn-warning',function(){
+        $('#modalRec').modal('hide')
+        if (getJsonLength(rcmd_pending.relations) > 0) {
+            //connection.io_create_insModel_relation(rcmd_pending.relations);
+            //console.log(rcmd_pending.relations);
+            connection.io_reject_rcmdModel_relation(rcmd_pending.relations);
+        }
+
+    })
+
+    //@deprecated
     $(document).on("click", '#modalCiteRcmd .btn-primary', function () {
         $("#modalCiteRcmd").modal('hide')
         connection.io_cite_recommend(0);
@@ -327,6 +404,14 @@ $(function () {
         drawEntity(id, instance_model); //画出中心区域
         $("#" + id).click();    //点击中心节点
     })
+    $(document).on('mouseover','g.entity.isRecommendation',function(){
+        let id = $(this).attr('id');
+        id = id.split("-")["0"];
+        if(data.isEntity(id,instance_model,false)) $(this).attr("fill","white");
+    })
+    $(document).on('mouseout','g.entity.isRecommendation',function(){
+       $(this).attr("fill","black");
+    })
 
     //单击节点
     $(document).on("click", 'g.entity', function () {
@@ -337,8 +422,10 @@ $(function () {
         if (d3.select(this).classed("isRecommendation") == true) {
             clickTimeout.set(function () {
                 let id = $(item).attr('id');
+                id = id.split("-")["0"];
                 //alert("双击节点可以直接节点与对应关系");
                 // 就是这里
+                if(data.isEntity(id,instance_model,false)) drawNodeDetails(id);
             });
         } else {
             clickTimeout.set(function () {
@@ -349,6 +436,7 @@ $(function () {
                     $(properties).children().remove();
                     detail.drawIndex();
                     svg.drawEntity(id);
+
                 } else {//大多数时候执行这个
                     drawNodeDetails(id);
                 }
@@ -407,33 +495,33 @@ $(function () {
 
     // 响应推荐事件
     // $(document).on("click", '.entity.isRecommendation', function () {
-    $(document).on("click", 'g.isRecommendation', function () {
-        // 初始化
-        let item = $("#modalRec .modal-body")
-        let id = $(this).attr("id");
-
-        clickTimeout.set(function () {
-
-            $(item).children().remove();
-
-            let ids = id.split("-");
-            let nodeId = ids[0]
-            let relationId = ids[ids.length - 1];
-
-            // 获取构建信息
-            rcmd_pending = detail.getRecommendationDetail(relationId)
-            // let content = detail.getRecommendationContent(relationId, rcmd_pending)
-            content = detail.getRecommendationContentEntity(relationId, rcmd_pending)
-            content += detail.getRecommendationContentRel(relationId, rcmd_pending)
-            $(item).append(content)
-
-            // 获取推荐实体信息
-            // content = generatePoperContent(nodeId,recommend_model);
-            // $(item).append(content)
-
-            $("#modalRec").modal("show")
-        });
-    })
+    // $(document).on("click", 'g.isRecommendation', function () {
+    //     // 初始化
+    //     let item = $("#modalRec .modal-body")
+    //     let id = $(this).attr("id");
+    //
+    //     clickTimeout.set(function () {
+    //
+    //         $(item).children().remove();
+    //
+    //         let ids = id.split("-");
+    //         let nodeId = ids[0]
+    //         let relationId = ids[ids.length - 1];
+    //
+    //         // 获取构建信息
+    //         rcmd_pending = detail.getRecommendationDetail(relationId)
+    //         // let content = detail.getRecommendationContent(relationId, rcmd_pending)
+    //         content = detail.getRecommendationContentEntity(relationId, rcmd_pending)
+    //         content += detail.getRecommendationContentRel(relationId, rcmd_pending)
+    //         $(item).append(content)
+    //
+    //         // 获取推荐实体信息
+    //         // content = generatePoperContent(nodeId,recommend_model);
+    //         // $(item).append(content)
+    //
+    //         $("#modalRec").modal("show")
+    //     });
+    // })
 
     //双击节点
     $(document).on("dblclick", 'g', function () {
@@ -442,13 +530,40 @@ $(function () {
             return;
         }
         if (d3.select(this).classed("isRecommendation") == true) { //双击推荐信息 -> 引用推荐
-            clickTimeout.clear();
-
+            // clickTimeout.clear();
+            //
+            // let id = $(this).attr("id");
+            // let ids = id.split("-");
+            // let relationId = ids[ids.length - 1];
+            //
+            // detail.citeRecommendation(relationId);
+            let item = $("#modalRec .modal-body")
             let id = $(this).attr("id");
-            let ids = id.split("-");
-            let relationId = ids[ids.length - 1];
 
-            detail.citeRecommendation(relationId);
+            clickTimeout.set(function () {
+
+                $(item).children().remove();
+
+                let ids = id.split("-");
+                let nodeId = ids[0]
+                let relationId = ids[ids.length - 1];
+
+                // 获取构建信息
+                rcmd_pending = detail.getRecommendationDetail(relationId)
+                // let content = detail.getRecommendationContent(relationId, rcmd_pending)
+                content = ""
+                //content = detail.getRecommendationContentEntity(relationId, rcmd_pending)
+                content += detail.getRecommendationContentRel(relationId, rcmd_pending)
+                $(item).append(content)
+                //console.log(content);
+
+                // 获取推荐实体信息
+                // content = generatePoperContent(nodeId,recommend_model);
+                // $(item).append(content)
+
+                $("#modalRec").modal("show")
+                //detail.citeRecommendation(relationId);
+            });
         } else {
             clickTimeout.clear();
 
